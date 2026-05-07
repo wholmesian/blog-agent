@@ -1,8 +1,8 @@
 import os
 import yaml
-from notion_parser import NotionParser
-from image_handler import ImageHandler
-from gemini_formatter import GeminiFormatter
+from .notion_parser import NotionParser
+from .image_handler import ImageHandler
+from .gemini_formatter import GeminiFormatter
 from datetime import datetime
 
 def load_config(config_path="config.yaml"):
@@ -170,16 +170,16 @@ def convert_notion_to_jekyll(page_id: str, config_path: str = "config.yaml") -> 
             os.makedirs(series_dir, exist_ok=True)
             for series_obj in new_series:
                 taxonomy = series_obj.get("taxonomy", "")
-                korean_title = series_obj.get("korean_title", taxonomy)
+                eng_title = series_obj.get("english_title", taxonomy)
                 if not taxonomy:
                     continue
                 
-                series_safe = "".join([c if c.isalnum() else "-" for c in taxonomy.lower().replace(" ", "-")])
+                series_safe = "".join([c if c.isalnum() else "-" for c in eng_title.lower().replace(" ", "-")])
                 series_file = os.path.join(series_dir, f"series-{series_safe}.md")
                 if not os.path.exists(series_file):
                     print(f"Creating series page: {series_file}")
                     with open(series_file, "w", encoding="utf-8") as sf:
-                        sf.write(f"---\ntitle: \"{korean_title}\"\nlayout: series\npermalink: /series/{series_safe}/\nauthor_profile: true\nsidebar:\n  nav: \"categories\"\n---\n")
+                        sf.write(f"---\ntitle: \"{taxonomy}\"\nlayout: series\npermalink: /series/{series_safe}/\nauthor_profile: true\ntaxonomy: {taxonomy}\nsidebar:\n  nav: \"categories\"\n---\n")
 
         print("\n✅ Blog post generation completed successfully!")
         return f"Success: Blog post generated and saved at {file_path}"

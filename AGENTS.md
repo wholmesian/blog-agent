@@ -96,19 +96,20 @@ sidebar:
 3. 시리즈 페이지는 markdown 형식이며, 아래 프론트매터 형식을 따릅니다.
 ```
 ---
-title: "series1"
+title: "시리즈 1"
 layout: series
 permalink: /series/series1/
 author_profile: true
+taxonomy: 시리즈 1
 sidebar:
   nav: "categories"
 ---
 ```
 
 - layout, author_profile, sidebar는 위와 같이 고정합니다.
-- taxonomy: 노션 페이지의 series 프로퍼티에 존재하는 시리즈의 이름을 그대로 사용합니다. 큰따옴표를 사용하지 않습니다. 항상 영어입니다.
-- title: taxonomy를 적절히 번역한 한국어 제목을 사용합니다. 큰따옴표를 둘러야 합니다.
-- permalink: `/series/{taxonomy}` 형식으로 작성합니다. 예를 들어, taxonomy가 "sample"이라면 permalink는 `/series/sample/` 입니다. permalink에는 따옴표를 두르지 않습니다.
+- taxonomy: 노션 페이지의 series 프로퍼티에 존재하는 시리즈의 이름을 그대로 사용합니다. 큰따옴표를 사용하지 않습니다.
+- title: taxonomy를 그대로 사용합니다. 큰따옴표를 둘러야 합니다.
+- permalink: taxonomy를 적절히 번역하여 `/series/{translated-taxonomy}` 형식으로 작성합니다. 예를 들어, taxonomy가 "샘플"이라면 이를 번역한 영어 제목이 "sample"이고, permalink는 `/series/sample/` 입니다. permalink에는 따옴표를 두르지 않습니다.
 
 ## 5. 새로운 카테고리, 프로젝트 추가 규칙
 1. 카테고리와 프로젝트는 반드시 사용자가 수동으로 추가합니다. 새로운 카테고리/프로젝트를 임의로 추가하거나 수정하지 않습니다.

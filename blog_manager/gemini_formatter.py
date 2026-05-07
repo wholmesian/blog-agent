@@ -77,7 +77,7 @@ class GeminiFormatter:
 {{
     "markdown_content": "---\\nlayout: post\\ntitle: ...\\n---\\n\\n본문 내용...",
     "new_tags": [{{"taxonomy": "태그원문", "english_title": "tag-slug"}}],
-    "new_series": [{{"taxonomy": "시리즈원문(영어)", "korean_title": "번역된 한국어 제목"}}],
+    "new_series": [{{"taxonomy": "시리즈원문", "english_title": "번역된 영어 제목(URL용)"}}],
     "category_path": "상위카테고리/하위카테고리"
 }}
 """
