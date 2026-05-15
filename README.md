@@ -25,6 +25,13 @@ wholmesian.github.io 관리를 돕는 Agentic AI 도구
   - 사용자로부터 명시적인 확인(Confirmation)을 받은 후에만 실행
   - 마크다운 파일 및 이미지 파일을 삭제하며, 이미지가 삭제된 후 빈 폴더가 남으면 함께 정리
 
+### 4. 블로그 에셋 정리 도구 (`find_unused_assets` & `execute_cleanup`)
+- **기능**: 블로그 내에서 더 이상 참조되지 않는 잉여 에셋(태그, 시리즈, 프로젝트, 이미지)을 스캔하고, 사용자가 선택적으로 삭제할 수 있도록 돕습니다.
+- **특징**:
+  - `_posts/`의 프론트매터 및 본문을 분석하여 실제 사용 중인 에셋만 추려내어 미사용 파일 식별
+  - 사용자에게 미사용 항목을 리스트업하고, 안전하게 삭제 대상을 부분 선택(partial selection) 가능
+  - 태그 페이지 파일 삭제 시, `_data/tag_slugs.yml`의 매핑 정보도 자동으로 동기화하여 삭제
+
 <br>
 
 ## ⚙️ 시스템 워크플로우 시각화
@@ -45,29 +52,73 @@ flowchart TD
         N1 --> N2 --> N3 --> N4
     end
 
-    subgraph T2["🗑 Tool 2 · find_files_to_delete + delete_files"]
+    subgraph T2["🗑 Tool 2 · 포스트 삭제 (find & delete)"]
         D1["find_files_to_delete\nFrontmatter 스캔 & 이미지 경로 추출"]
         D2{{"⚠️ 사용자 확인\nAgent가 파일 목록 제시"}}
         D3["delete_files\n.md & 이미지 파일 삭제\n빈 디렉토리 정리"]
         D1 --> D2 -->|"Yes"| D3
     end
 
-    subgraph Jekyll["📁 Jekyll 블로그 (wholmesian.github.io)"]
-        J1["_posts/"]
-        J2["assets/images/posts_img/"]
-        J3["_pages/tags/ & _pages/series/"]
+    subgraph T3["🧹 Tool 3 · 에셋 정리 (find & cleanup)"]
+        C1["find_unused_assets\n미사용 에셋(태그, 이미지 등) 스캔"]
+        C2{{"⚠️ 사용자 확인\n삭제 대상 부분 선택"}}
+        C3["execute_cleanup\n파일 삭제 및 빈 폴더 정리\ntag_slugs.yml 동기화"]
+        C1 --> C2 -->|"선택된 항목만"| C3
     end
 
-    User -->|"자연어 요청\nNotion URL 또는 포스트 제목"| LLM
+    subgraph Jekyll["📁 Jekyll 블로그 (wholmesian.github.io)"]
+        J1["_posts/"]
+        J2["assets/images/... (원본 및 _site 빌드 경로)"]
+        J3["_pages/ (tags, series, projects)"]
+        J4["_data/tag_slugs.yml"]
+    end
+
+    User -->|"자연어 요청\n(발행 / 삭제 / 정리)"| LLM
     LLM -->|"포스트 발행"| T1
     LLM -->|"포스트 삭제"| T2
+    LLM -->|"블로그 정리"| T3
+    
     N4 --> J1
     N4 --> J2
     N4 --> J3
+    
     D3 --> J1
     D3 --> J2
+    
+    C3 --> J2
+    C3 --> J3
+    C3 --> J4
+    
     T1 -->|"결과 반환"| LLM
     T2 -->|"결과 반환"| LLM
+    T3 -->|"결과 반환"| LLM
+    
     LLM -->|"결과 보고 & 확인 요청"| User
-    User -->|"확인 (Yes / No)"| LLM
+    User -->|"확인 및 응답 (Yes / 번호 선택 등)"| LLM
 ```
+
+## 🚀 사용 방법 (How to Use)
+
+Google Agent Development Kit (ADK) CLI를 사용하여 에이전트를 실행할 수 있습니다.
+
+1. `blog-agent` 디렉토리로 이동하여 가상 환경을 활성화합니다.
+   ```bash
+   source venv/bin/activate
+   ```
+2. **CLI 환경에서 실행하기**
+   `adk run` 명령어를 통해 터미널에서 챗봇 프롬프트를 실행합니다.
+   ```bash
+   adk run blog_manager/agent.py
+   ```
+
+3. **Web UI 환경에서 실행하기**
+   ADK에서 제공하는 Web UI 서버를 띄워 브라우저에서 직관적으로 사용할 수 있습니다.
+   ```bash
+   adk web .
+   ```
+   *(터미널에 출력되는 `http://localhost:8080` 등의 로컬 주소로 접속하세요)*
+
+4. 실행된 프롬프트 또는 웹 브라우저에서 자연어로 자유롭게 요청합니다.
+   - *"이 노션 페이지를 블로그로 만들어줘: [Notion URL]"*
+   - *"[포스트 제목] 포스트랑 관련 이미지들 다 지워줄래?"*
+   - *"블로그 정리 도구를 실행해서 안 쓰는 태그나 이미지를 지워줘"*

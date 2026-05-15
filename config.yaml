@@ -6,7 +6,7 @@ mapping:
     # 마크다운 파일이 저장될 로컬 디렉토리
     post_dir: "../wholmesian.github.io/_posts"
     # 다운로드한 이미지가 저장될 로컬 디렉토리
-    image_dir: "../wholmesian.github.io/assets/images/posts_img/"
+    image_dir: "../wholmesian.github.io/_site/assets/images/posts_img/"
     # 마크다운 본문에 삽입될 웹루트 절대 경로
     image_web_root: "/assets/images/posts_img/"
 
