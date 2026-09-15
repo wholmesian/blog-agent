@@ -122,3 +122,79 @@ Google Agent Development Kit (ADK) CLI를 사용하여 에이전트를 실행할
    - *"이 노션 페이지를 블로그로 만들어줘: [Notion URL]"*
    - *"[포스트 제목] 포스트랑 관련 이미지들 다 지워줄래?"*
    - *"블로그 정리 도구를 실행해서 안 쓰는 태그나 이미지를 지워줘"*
+
+<br>
+
+## 🔌 MCP 서버로 사용하기 (Google Antigravity / Claude Desktop)
+
+ADK CLI(`adk run` / `adk web`) 외에, 동일한 5개 도구(`convert_notion_to_jekyll`,
+`find_files_to_delete`, `delete_files`, `find_unused_assets`, `execute_cleanup`)를
+[Model Context Protocol(MCP)](https://modelcontextprotocol.io) 서버로도 노출합니다.
+이 방식으로 **Google Antigravity**나 **Claude Desktop**(혹은 다른 MCP 호환 클라이언트)에서
+동일한 blog-agent를 그대로 사용할 수 있습니다.
+
+두 흐름은 서로 독립적입니다 — `agent.py`(ADK)는 그대로 두었고, `mcp_server.py`가
+같은 도구 함수들을 재사용해서 MCP 프로토콜로만 감싼 것입니다.
+
+### 1. 준비
+
+```bash
+cd blog-agent
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt   # mcp[cli] 포함
+cp .env.sample .env               # NOTION_API_KEY / GEMINI_API_KEY 입력
+```
+
+MCP 서버는 시작할 때 자동으로 저장소 루트로 작업 디렉토리를 옮기고 `.env`를
+직접 읽어오기 때문에, 어떤 앱이 어떤 경로에서 프로세스를 띄우든
+`config.yaml`이나 `../wholmesian.github.io/...` 같은 기존 상대 경로 로직이
+그대로 동작합니다.
+
+### 2. 동작 확인 (선택)
+
+```bash
+python -m blog_manager.mcp_server
+```
+정상적으로 실행되면 터미널이 멈춘 채로 대기합니다(stdio로 MCP 클라이언트의
+연결을 기다리는 정상 상태입니다). `Ctrl+C`로 종료하세요.
+
+### 3. Claude Desktop에 연결하기
+
+Claude Desktop 설정(Settings → Developer → Edit Config)에서 여는 설정 파일에
+`mcp-configs/claude_desktop_config.example.json`의 `blog-agent` 항목을
+합쳐 넣고, 경로를 실제 절대 경로로 바꾼 뒤 Claude Desktop을 재시작하세요.
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "blog-agent": {
+      "command": "/ABSOLUTE/PATH/TO/blog-agent/venv/bin/python3",
+      "args": ["-m", "blog_manager.mcp_server"],
+      "cwd": "/ABSOLUTE/PATH/TO/blog-agent"
+    }
+  }
+}
+```
+
+### 4. Google Antigravity에 연결하기
+
+`mcp-configs/antigravity_mcp_config.example.json`의 내용을 경로만 바꿔서
+아래 위치 중 하나에 저장한 뒤, Antigravity에서 MCP 서버 목록을 새로고침하세요.
+
+- 전역: `~/.gemini/config/mcp_config.json`
+- 이 프로젝트에만 적용: `.agents/mcp_config.json`
+
+### 5. 참고 사항
+
+- 두 클라이언트 모두 도구를 실제로 실행하기 전에 사용자 확인을 요청하는
+  UI를 갖고 있어서, `delete_files` / `execute_cleanup`처럼 파일을 지우는
+  도구도 기존 ADK 버전과 동일하게 "먼저 찾고 확인받은 뒤 삭제" 흐름을
+  유지할 수 있습니다. MCP 서버의 `instructions`에도 이 흐름을 명시해
+  두었습니다.
+- Notion/Gemini API 키는 `.env`에서 읽어오므로, Claude Desktop이나
+  Antigravity의 설정 파일에 별도로 `env` 값을 넣지 않아도 됩니다. 원한다면
+  `env` 필드로 덮어쓸 수도 있습니다.

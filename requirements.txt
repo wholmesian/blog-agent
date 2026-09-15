@@ -3,4 +3,10 @@ google-generativeai>=0.8.2
 requests>=2.31.0
 pyyaml>=6.0.1
 python-dotenv>=1.0.1
+
+# Only needed if you run the agent via the Google ADK CLI (`adk run` / `adk web`).
 google-adk>=1.32.0
+
+# Only needed if you run the agent as an MCP server for Google Antigravity,
+# Claude Desktop, Claude Code, etc. (`python -m blog_manager.mcp_server`).
+mcp[cli]>=1.2.0
