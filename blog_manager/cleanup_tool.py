@@ -1,12 +1,14 @@
+import logging
 import os
 import re
 import yaml
 
-def load_config(config_path="config.yaml"):
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+from .paths import BlogPaths, load_config
+from .safety import remove_empty_dirs, validate_batch
 
-def find_unused_assets(config_path: str = "config.yaml") -> dict:
+logger = logging.getLogger(__name__)
+
+def find_unused_assets(config_path: str = None) -> dict:
     """
     Scans the blog repository to find unused tags, series, projects, and images.
     Returns a dictionary of unused files categorized by type.
@@ -16,18 +18,14 @@ def find_unused_assets(config_path: str = "config.yaml") -> dict:
     except Exception as e:
         return {"error": f"Failed to load config: {e}"}
 
-    mapping = config.get("mapping", {}).get("default", {})
-    post_dir = mapping.get("post_dir", "../wholmesian.github.io/_posts")
-    image_dir = mapping.get("image_dir", "../wholmesian.github.io/assets/images/posts_img/")
-    image_web_root = mapping.get("image_web_root", "/assets/images/posts_img/")
+    paths = BlogPaths(config=config)
+    post_dir = str(paths.post_dir())
+    image_dir = str(paths.image_dir())
     
-    base_dir = os.path.dirname(post_dir)
-    
-    tags_dir = os.path.join(base_dir, "_pages", "tags")
-    series_dir = os.path.join(base_dir, "_pages", "series")
-    projects_dir = os.path.join(base_dir, "_pages", "projects")
-    projects_img_dir_1 = os.path.join(base_dir, "assets", "images", "projects_img")
-    projects_img_dir_2 = os.path.join(base_dir, "_site", "assets", "images", "projects_img")
+    tags_dir = str(paths.tags_dir)
+    series_dir = str(paths.series_dir)
+    projects_dir = str(paths.projects_dir)
+    projects_img_dir_1, projects_img_dir_2 = [str(p) for p in paths.projects_img_dirs]
     
     used_tags = set()
     used_series = set()
@@ -177,47 +175,50 @@ def find_unused_assets(config_path: str = "config.yaml") -> dict:
 
     return unused_files
 
-def execute_cleanup(files_to_delete: list[str], config_path: str = "config.yaml") -> str:
+def execute_cleanup(files_to_delete: list[str], confirm: bool = False, config_path: str = None) -> dict:
     """
-    Deletes the specified files from the file system.
-    If a tag file is deleted, it also updates _data/tag_slugs.yml to remove the mapping.
-    
-    Args:
-        files_to_delete: A list of absolute file paths to delete.
-        config_path: Path to the config file.
+    Deletes the specified unused files. Dry-run by default; pass confirm=True to really delete.
+    If a tag page is really deleted, _data/tag_slugs.yml is also updated (never in dry-run).
+    Every path is validated by safety.assert_deletable.
+
+    Returns:
+        {ok, dry_run, deleted[], skipped[{path, reason}], errors[{path, reason}]}
     """
     try:
-        config = load_config(config_path)
-        base_dir = os.path.dirname(config.get("mapping", {}).get("default", {}).get("post_dir", "../wholmesian.github.io/_posts"))
-    except:
-        base_dir = "../wholmesian.github.io"
-        
-    tag_slugs_path = os.path.join(base_dir, "_data", "tag_slugs.yml")
-    
-    deleted_count = 0
+        paths = BlogPaths(config=load_config(config_path))
+    except Exception as e:
+        return {"ok": False, "dry_run": not confirm, "deleted": [], "skipped": [],
+                "errors": [{"path": "", "reason": f"Failed to load config: {e}"}]}
+
+    tag_slugs_path = str(paths.tag_slugs_file)
+    tags_dir = paths.tags_dir.resolve()
+
+    ok_paths, rejected = validate_batch(files_to_delete, paths=paths)
+    result = {"ok": True, "dry_run": not confirm, "deleted": [], "skipped": rejected, "errors": []}
+
     dirs_to_check = set()
     slugs_to_remove = set()
-    
-    for filepath in files_to_delete:
-        if os.path.exists(filepath) and os.path.isfile(filepath):
-            if "_pages/tags/tag-" in filepath.replace("\\\\", "/").replace("\\", "/"):
-                basename = os.path.basename(filepath)
-                if basename.startswith("tag-") and basename.endswith(".md"):
-                    slug = basename[4:-3]
-                    slugs_to_remove.add(slug)
-                    
-            try:
-                os.remove(filepath)
-                deleted_count += 1
-                dirs_to_check.add(os.path.dirname(filepath))
-            except Exception as e:
-                print(f"Failed to delete {filepath}: {e}")
-                
-    if slugs_to_remove and os.path.exists(tag_slugs_path):
+
+    for p in ok_paths:
+        if not confirm:
+            result["deleted"].append(str(p))
+            continue
+        if p.parent == tags_dir and p.name.startswith("tag-") and p.name.endswith(".md"):
+            slugs_to_remove.add(p.name[4:-3])
+        try:
+            os.remove(p)
+            result["deleted"].append(str(p))
+            dirs_to_check.add(p.parent)
+        except Exception as e:
+            logger.error(f"Failed to delete {p}: {e}")
+            result["errors"].append({"path": str(p), "reason": str(e)})
+            slugs_to_remove.discard(p.name[4:-3])
+
+    if confirm and slugs_to_remove and os.path.exists(tag_slugs_path):
         try:
             with open(tag_slugs_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-                
+
             new_lines = []
             for line in lines:
                 parts = line.split(":", 1)
@@ -227,18 +228,14 @@ def execute_cleanup(files_to_delete: list[str], config_path: str = "config.yaml"
                         new_lines.append(line)
                 else:
                     new_lines.append(line)
-                    
+
             with open(tag_slugs_path, "w", encoding="utf-8") as f:
                 f.writelines(new_lines)
         except Exception as e:
-            print(f"Failed to update tag_slugs.yml: {e}")
+            logger.error(f"Failed to update tag_slugs.yml: {e}")
+            result["errors"].append({"path": tag_slugs_path, "reason": str(e)})
 
-    for d in dirs_to_check:
-        if os.path.exists(d) and os.path.isdir(d):
-            if not os.listdir(d):
-                try:
-                    os.rmdir(d)
-                except Exception:
-                    pass
-
-    return f"Successfully deleted {deleted_count} files."
+    if confirm:
+        remove_empty_dirs(dirs_to_check, paths=paths)
+    result["ok"] = not result["errors"]
+    return result
