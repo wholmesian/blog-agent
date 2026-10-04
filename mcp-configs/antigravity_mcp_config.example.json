@@ -1,10 +1,9 @@
 {
-  "_comment": "Save this (with the paths below edited) as ~/.gemini/config/mcp_config.json for every Antigravity workspace, or as .agents/mcp_config.json inside just this project. Replace every /ABSOLUTE/PATH/TO/blog-agent with the real path on your machine, then reload the MCP servers in Antigravity.",
+  "_comment": "Save as ~/.gemini/config/mcp_config.json (or .agents/mcp_config.json in this project). Replace /ABSOLUTE/PATH/TO/blog-agent, then reload MCP servers in Antigravity.",
   "mcpServers": {
     "blog-agent": {
       "command": "/ABSOLUTE/PATH/TO/blog-agent/venv/bin/python3",
-      "args": ["-m", "blog_manager.mcp_server"],
-      "cwd": "/ABSOLUTE/PATH/TO/blog-agent"
+      "args": ["-m", "blog_manager.mcp_server"]
     }
   }
 }

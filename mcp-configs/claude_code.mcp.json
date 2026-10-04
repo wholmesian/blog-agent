@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "blog-agent": {
+      "command": "/ABSOLUTE/PATH/TO/blog-agent/venv/bin/python3",
+      "args": ["-m", "blog_manager.mcp_server"]
+    }
+  }
+}

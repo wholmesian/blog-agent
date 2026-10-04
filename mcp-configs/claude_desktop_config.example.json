@@ -1,10 +1,9 @@
 {
-  "_comment": "Merge the 'blog-agent' entry below into the 'mcpServers' object of your own claude_desktop_config.json (macOS: ~/Library/Application Support/Claude/claude_desktop_config.json, Windows: %APPDATA%\\Claude\\claude_desktop_config.json). Replace every /ABSOLUTE/PATH/TO/blog-agent below with the real path on your machine, then restart Claude Desktop.",
+  "_comment": "Merge the 'blog-agent' entry into 'mcpServers' of claude_desktop_config.json (macOS: ~/Library/Application Support/Claude/, Windows: %APPDATA%\\Claude\\). Replace /ABSOLUTE/PATH/TO/blog-agent, then restart Claude Desktop.",
   "mcpServers": {
     "blog-agent": {
       "command": "/ABSOLUTE/PATH/TO/blog-agent/venv/bin/python3",
-      "args": ["-m", "blog_manager.mcp_server"],
-      "cwd": "/ABSOLUTE/PATH/TO/blog-agent"
+      "args": ["-m", "blog_manager.mcp_server"]
     }
   }
 }

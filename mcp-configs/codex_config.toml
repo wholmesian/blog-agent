@@ -1,0 +1,4 @@
+# Append to ~/.codex/config.toml. Replace /ABSOLUTE/PATH/TO/blog-agent.
+[mcp_servers.blog-agent]
+command = "/ABSOLUTE/PATH/TO/blog-agent/venv/bin/python3"
+args = ["-m", "blog_manager.mcp_server"]
