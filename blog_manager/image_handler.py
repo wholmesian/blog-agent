@@ -1,27 +1,28 @@
+import logging
 import os
 import requests
-import yaml
 import uuid
 from urllib.parse import urlparse
+
+from .paths import BlogPaths
+
+logger = logging.getLogger(__name__)
 
 class ImageHandler:
     """
     Notion 문서에 포함된 이미지를 다운로드하고, 설정된 웹루트 경로로 변환하는 클래스입니다.
     """
     def __init__(self, config_path="config.yaml"):
-        with open(config_path, "r", encoding="utf-8") as f:
-            self.config = yaml.safe_load(f)
+        self.paths = BlogPaths(config_path)
+        self.config = self.paths.config
 
     def download_image(self, url: str, category: str = "default", date_str: str = "", title: str = "") -> str:
         """
         주어진 URL에서 이미지를 다운로드하여 로컬에 저장한 후, 마크다운 본문에 쓰일 절대 경로를 반환합니다.
         """
-        mapping = self.config.get("mapping", {})
-        # 카테고리가 맵핑에 없으면 default 설정 사용
-        cat_config = mapping.get(category, mapping.get("default", {}))
-        
-        image_dir = cat_config.get("image_dir", "./images")
-        web_root = cat_config.get("image_web_root", "/images")
+        # 카테고리가 맵핑에 없으면 default 설정 사용 (경로는 repo 루트 기준으로 해석)
+        image_dir = str(self.paths.image_dir(category))
+        web_root = self.paths.image_web_root(category)
         
         # 포스트 날짜 폴더 경로 설정 (YYYY-MM-DD 형식 보장)
         date_folder = date_str[:10] if date_str else "1970-01-01"
@@ -61,7 +62,7 @@ class ImageHandler:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
         else:
-            print(f"Warning: Failed to download image from {url}")
+            logger.warning(f"Failed to download image from {url}")
             return url # 실패 시 원본 링크 반환
                 
         # 마크다운에 삽입될 웹루트 절대 경로 문자열 반환 (예: /assets/images/posts_img/2026-04-25/title.png)
