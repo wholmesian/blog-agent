@@ -1,200 +1,175 @@
 # blog-agent
-wholmesian.github.io 관리를 돕는 Agentic AI 도구
+wholmesian.github.io 관리를 돕는 도구 모음 (Claude Code / Codex / Google Antigravity / Claude Desktop 지원)
 
-## 🛠 구현된 도구 (Implemented Tools)
+## 📌 소개
 
-현재 `blog_manager` 에이전트에는 블로그 관리를 자동화하기 위한 세 가지 핵심 도구가 구현되어 있습니다.
+Notion 페이지를 Jekyll 블로그 포스트로 발행하고, 기존 포스트를 삭제하거나 안 쓰는 에셋을 정리하는 작업을 AI 코딩 에이전트가 안전하게 수행할 수 있도록 돕습니다.
 
-### 1. Notion to Jekyll 변환 도구 (`convert_notion_to_jekyll`)
-- **기능**: 사용자가 제공한 Notion 페이지 ID 또는 URL을 기반으로 페이지 내용을 파싱하고, Jekyll 블로그용 Markdown 포스트로 변환합니다.
-- **특징**:
-  - 노션 본문 블록 및 메타데이터 추출
-  - 본문 내 이미지를 다운로드하여 로컬 및 웹루트 경로로 자동 매핑
-  - Gemini API를 활용하여 제목을 영어 Slug로 변환 및 프론트매터 자동 생성
-  - 포스트에 포함된 새로운 태그(Tag) 및 시리즈(Series) 페이지 자동 생성
+핵심 원칙은 **"도구는 결정적인 작업만, 판단과 글쓰기는 호스트 에이전트가"** 입니다.
 
-### 2. 블로그 포스트 검색 도구 (`find_files_to_delete`)
-- **기능**: 삭제하고자 하는 블로그 포스트의 제목(title)을 입력받아, 해당하는 마크다운 파일과 해당 포스트에서 사용된 이미지 파일들을 탐색합니다.
-- **특징**:
-  - 사용자의 실수로 인한 삭제를 방지하기 위한 2단계 삭제 프로세스의 첫 번째 단계
-  - Frontmatter를 분석하여 정확한 포스트를 찾고, 본문 내에서 로컬 이미지 참조를 추출
-
-### 3. 블로그 포스트 삭제 도구 (`delete_files`)
-- **기능**: `find_files_to_delete` 도구가 반환한 파일 목록을 실제로 파일 시스템에서 삭제합니다.
-- **특징**:
-  - 사용자로부터 명시적인 확인(Confirmation)을 받은 후에만 실행
-  - 마크다운 파일 및 이미지 파일을 삭제하며, 이미지가 삭제된 후 빈 폴더가 남으면 함께 정리
-
-### 4. 블로그 에셋 정리 도구 (`find_unused_assets` & `execute_cleanup`)
-- **기능**: 블로그 내에서 더 이상 참조되지 않는 잉여 에셋(태그, 시리즈, 프로젝트, 이미지)을 스캔하고, 사용자가 선택적으로 삭제할 수 있도록 돕습니다.
-- **특징**:
-  - `_posts/`의 프론트매터 및 본문을 분석하여 실제 사용 중인 에셋만 추려내어 미사용 파일 식별
-  - 사용자에게 미사용 항목을 리스트업하고, 안전하게 삭제 대상을 부분 선택(partial selection) 가능
-  - 태그 페이지 파일 삭제 시, `_data/tag_slugs.yml`의 매핑 정보도 자동으로 동기화하여 삭제
+- 이 repo 자체에는 LLM이 없습니다. (이전의 Google ADK / Gemini 연동은 제거되었습니다.)
+- 영어 slug 결정, 프론트매터 작성, 본문 다듬기는 호스트 에이전트(Claude Code 등)가 `AGENTS.md`의 규칙에 따라 수행합니다.
+- 파일 쓰기, 검증, 삭제는 `blog_manager`의 CLI/MCP 도구가 수행하며, 삭제류에는 안전장치가 코드로 강제됩니다.
 
 <br>
 
-## ⚙️ 시스템 워크플로우 시각화
+## 🧱 아키텍처
+
+```
+AGENTS.md  (포맷 규칙 + 작업 원칙)  <- CLAUDE.md(@AGENTS.md), Codex/Antigravity가 직접 읽음
+skills/    (정본 워크플로우: publish-post / delete-post / cleanup-blog)
+   ├─ .claude/skills/*  -> ../../skills/*  (심볼릭 링크)
+   └─ .agents/skills/*  -> ../../skills/*  (심볼릭 링크)
+        │ 호출
+blog_manager/  (순수 도구 함수: print/LLM 없음, 구조화된 JSON 반환)
+   ├─ CLI         python -m blog_manager <command>   (셸을 쓸 수 있는 모든 에이전트)
+   └─ MCP 서버    python -m blog_manager.mcp_server  (MCP 선호 호스트)
+```
+
+| 모듈 | 역할 |
+|---|---|
+| `notion_export.py`, `notion_markdown.py`, `notion_parser.py`, `image_handler.py` | Notion 조회, 이미지 다운로드/경로 치환, 블록 -> 마크다운 초안 |
+| `post_validate.py` | `AGENTS.md` 규칙 검증 (읽기 전용) |
+| `post_writer.py` | `_posts/YYYY-MM-DD-slug.md` 저장 |
+| `taxonomy.py` | 태그/시리즈 페이지 생성, `tag_slugs.yml` 갱신 |
+| `delete_post_tool.py`, `cleanup_tool.py` | 포스트 삭제, 미사용 에셋 탐색/정리 |
+| `paths.py`, `safety.py` | `config.yaml` 기반 경로 해석, 삭제 경로 검증 |
+
+<br>
+
+## ⚙️ 시스템 워크플로우
 
 ```mermaid
 flowchart TD
-    User(["👤 사용자"])
+    User(["사용자"])
+    Host["호스트 에이전트\n(Claude Code / Codex / Antigravity / Claude Desktop)\nAGENTS.md + skills/ 를 따름"]
 
-    subgraph AgentLoop["🔄 Agentic Loop"]
-        LLM["🤖 Blog Agent\nGemini 2.5 Flash · Google ADK\n\n자연어 이해 & 도구 선택"]
+    subgraph Tools["blog_manager 도구 (CLI 또는 MCP)"]
+        subgraph Publish["포스트 발행 (publish-post)"]
+            P1["notion-fetch\n프로퍼티·이미지·markdown_draft"]
+            P2["호스트가 slug 결정\n프론트매터·본문 작성\n(임시 파일)"]
+            P3["post-validate\n규칙 검증"]
+            P4["taxonomy-ensure\n새 태그·시리즈 페이지"]
+            P5["post-write\n_posts/ 에 저장"]
+            P1 --> P2 --> P3
+            P3 -->|"오류: 수정 후 재검증"| P2
+            P3 -->|"카테고리/프로젝트 없음"| Stop(["중단 + 사용자에게 알림"])
+            P3 -->|"통과"| P4 --> P5
+        end
+
+        subgraph Delete["포스트 삭제 (delete-post)"]
+            D1["find-files-to-delete"]
+            D2{{"목록 제시 + 사용자 확인"}}
+            D3["delete-files --yes\n(승인된 항목만)"]
+            D1 --> D2 -->|"Yes"| D3
+        end
+
+        subgraph Cleanup["블로그 정리 (cleanup-blog)"]
+            C1["find-unused-assets"]
+            C2{{"번호 목록 + 사용자 선택"}}
+            C3["execute-cleanup --yes\n(선택된 항목만, tag_slugs.yml 동기화)"]
+            C1 --> C2 -->|"선택 항목"| C3
+        end
     end
 
-    subgraph T1["🛠 Tool 1 · convert_notion_to_jekyll"]
-        N1["NotionParser\n페이지 메타데이터 & 블록 추출"]
-        N2["ImageHandler\n이미지 다운로드 & 경로 매핑"]
-        N3["GeminiFormatter\n제목 슬러그 변환 & Markdown 생성"]
-        N4["파일 저장 & 새 태그·시리즈 페이지 생성"]
-        N1 --> N2 --> N3 --> N4
-    end
-
-    subgraph T2["🗑 Tool 2 · 포스트 삭제 (find & delete)"]
-        D1["find_files_to_delete\nFrontmatter 스캔 & 이미지 경로 추출"]
-        D2{{"⚠️ 사용자 확인\nAgent가 파일 목록 제시"}}
-        D3["delete_files\n.md & 이미지 파일 삭제\n빈 디렉토리 정리"]
-        D1 --> D2 -->|"Yes"| D3
-    end
-
-    subgraph T3["🧹 Tool 3 · 에셋 정리 (find & cleanup)"]
-        C1["find_unused_assets\n미사용 에셋(태그, 이미지 등) 스캔"]
-        C2{{"⚠️ 사용자 확인\n삭제 대상 부분 선택"}}
-        C3["execute_cleanup\n파일 삭제 및 빈 폴더 정리\ntag_slugs.yml 동기화"]
-        C1 --> C2 -->|"선택된 항목만"| C3
-    end
-
-    subgraph Jekyll["📁 Jekyll 블로그 (wholmesian.github.io)"]
+    subgraph Jekyll["Jekyll 블로그 (../wholmesian.github.io)"]
         J1["_posts/"]
-        J2["assets/images/... (원본 및 _site 빌드 경로)"]
-        J3["_pages/ (tags, series, projects)"]
+        J2["assets/images/..."]
+        J3["_pages/ (tags, series)"]
         J4["_data/tag_slugs.yml"]
     end
 
-    User -->|"자연어 요청\n(발행 / 삭제 / 정리)"| LLM
-    LLM -->|"포스트 발행"| T1
-    LLM -->|"포스트 삭제"| T2
-    LLM -->|"블로그 정리"| T3
-    
-    N4 --> J1
-    N4 --> J2
-    N4 --> J3
-    
+    User -->|"발행 / 삭제 / 정리 요청"| Host
+    Host --> Publish
+    Host --> Delete
+    Host --> Cleanup
+    P1 --> J2
+    P4 --> J3
+    P4 --> J4
+    P5 --> J1
     D3 --> J1
     D3 --> J2
-    
     C3 --> J2
     C3 --> J3
     C3 --> J4
-    
-    T1 -->|"결과 반환"| LLM
-    T2 -->|"결과 반환"| LLM
-    T3 -->|"결과 반환"| LLM
-    
-    LLM -->|"결과 보고 & 확인 요청"| User
-    User -->|"확인 및 응답 (Yes / 번호 선택 등)"| LLM
+    Host -->|"결과 보고 / 확인 요청"| User
 ```
-
-## 🚀 사용 방법 (How to Use)
-
-Google Agent Development Kit (ADK) CLI를 사용하여 에이전트를 실행할 수 있습니다.
-
-1. `blog-agent` 디렉토리로 이동하여 가상 환경을 활성화합니다.
-   ```bash
-   source venv/bin/activate
-   ```
-2. **CLI 환경에서 실행하기**
-   `adk run` 명령어를 통해 터미널에서 챗봇 프롬프트를 실행합니다.
-   ```bash
-   adk run blog_manager/agent.py
-   ```
-
-3. **Web UI 환경에서 실행하기**
-   ADK에서 제공하는 Web UI 서버를 띄워 브라우저에서 직관적으로 사용할 수 있습니다.
-   ```bash
-   adk web .
-   ```
-   *(터미널에 출력되는 `http://localhost:8080` 등의 로컬 주소로 접속하세요)*
-
-4. 실행된 프롬프트 또는 웹 브라우저에서 자연어로 자유롭게 요청합니다.
-   - *"이 노션 페이지를 블로그로 만들어줘: [Notion URL]"*
-   - *"[포스트 제목] 포스트랑 관련 이미지들 다 지워줄래?"*
-   - *"블로그 정리 도구를 실행해서 안 쓰는 태그나 이미지를 지워줘"*
 
 <br>
 
-## 🔌 MCP 서버로 사용하기 (Google Antigravity / Claude Desktop)
-
-ADK CLI(`adk run` / `adk web`) 외에, 동일한 5개 도구(`convert_notion_to_jekyll`,
-`find_files_to_delete`, `delete_files`, `find_unused_assets`, `execute_cleanup`)를
-[Model Context Protocol(MCP)](https://modelcontextprotocol.io) 서버로도 노출합니다.
-이 방식으로 **Google Antigravity**나 **Claude Desktop**(혹은 다른 MCP 호환 클라이언트)에서
-동일한 blog-agent를 그대로 사용할 수 있습니다.
-
-두 흐름은 서로 독립적입니다 — `agent.py`(ADK)는 그대로 두었고, `mcp_server.py`가
-같은 도구 함수들을 재사용해서 MCP 프로토콜로만 감싼 것입니다.
-
-### 1. 준비
+## 🚀 설치
 
 ```bash
 cd blog-agent
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt   # mcp[cli] 포함
-cp .env.sample .env               # NOTION_API_KEY / GEMINI_API_KEY 입력
+pip install -e ".[dev]"      # blog_manager 패키지를 설치해 어느 cwd에서도 python -m blog_manager 동작
+cp .env.sample .env     # NOTION_API_KEY 만 입력
 ```
 
-MCP 서버는 시작할 때 자동으로 저장소 루트로 작업 디렉토리를 옮기고 `.env`를
-직접 읽어오기 때문에, 어떤 앱이 어떤 경로에서 프로세스를 띄우든
-`config.yaml`이나 `../wholmesian.github.io/...` 같은 기존 상대 경로 로직이
-그대로 동작합니다.
+- `.env`에는 `NOTION_API_KEY`만 필요합니다. (`GEMINI_API_KEY`는 더 이상 쓰지 않습니다.)
+- 블로그 repo 위치는 `config.yaml`의 `blog_root`(기본 `../wholmesian.github.io`)이며, 환경변수 `BLOG_ROOT`로 덮어쓸 수 있습니다.
+- 에이전트는 `.env`를 읽거나 출력하지 않습니다. 키는 도구가 직접 읽습니다.
 
-### 2. 동작 확인 (선택)
+<br>
+
+## 🧑‍💻 호스트별 사용법
+
+MCP 설정 예시는 `mcp-configs/` 아래에 있습니다. 파일 안의 `/ABSOLUTE/PATH/TO/blog-agent`는 실제 절대 경로로 바꿔 사용하세요. MCP를 연결하지 않아도 에이전트가 셸에서 CLI를 직접 실행할 수 있습니다.
+
+### Claude Code
+- 이 repo에서 `claude`를 실행하면 `CLAUDE.md`(-> `AGENTS.md`)와 `.claude/skills/`의 스킬이 자동 로드됩니다.
+- MCP를 쓰려면 `mcp-configs/claude_code.mcp.json`을 프로젝트 루트의 `.mcp.json`으로 복사하세요. (선택 사항 - 없으면 CLI 사용)
+- 예: *"이 노션 페이지를 블로그로 만들어줘: [Notion URL]"*
+
+### Codex
+- `AGENTS.md`를 자동으로 읽습니다.
+- MCP는 `mcp-configs/codex_config.toml`의 `[mcp_servers.blog-agent]` 항목을 `~/.codex/config.toml`에 합쳐 넣으세요.
+- 스킬은 `.agents/skills/`로 노출되어 있으나 Codex의 스킬 로딩 경로/형식은 미확인입니다. 지원되지 않으면 `AGENTS.md`의 링크(`skills/*/SKILL.md`)를 직접 읽도록 안내하세요.
+
+### Google Antigravity
+- `mcp-configs/antigravity_mcp_config.example.json`을 경로만 바꿔 `~/.gemini/config/mcp_config.json`(전역) 또는 `.agents/mcp_config.json`(이 프로젝트)에 저장하고 MCP 서버 목록을 새로고침하세요.
+- 스킬 경로(`.agents/skills/`) 지원 여부는 미확인입니다. 지원되지 않으면 `AGENTS.md`/`skills/*/SKILL.md`를 직접 참조시키세요.
+
+### Claude Desktop
+- `mcp-configs/claude_desktop_config.example.json`의 `blog-agent` 항목을 Claude Desktop 설정 파일의 `mcpServers`에 합치고 재시작하세요.
+  - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+  - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- MCP 도구 설명만으로는 세부 절차가 부족하므로, 필요하면 `skills/*/SKILL.md` 내용을 대화에 붙여 넣으세요.
+
+<br>
+
+## 🧰 CLI 레퍼런스
+
+실행: `venv/bin/python -m blog_manager <command>` (결과 JSON은 stdout, 로그는 stderr, 전역 옵션 `--config PATH`)
+
+| 명령 | MCP 도구 | 설명 | 변경 여부 |
+|---|---|---|---|
+| `notion-fetch <id_or_url> [--slug S]` | `notion_fetch` | Notion 페이지 조회 + 이미지 다운로드 + `markdown_draft` 반환. 비영어 제목이면 `slug_required` | 이미지 다운로드 |
+| `post-write --slug S --date YYYY-MM-DD (--file PATH \| --stdin) [--overwrite]` | `post_write` | 작성된 마크다운을 `_posts/`에 저장 | 파일 생성 |
+| `taxonomy-ensure [--tag 태그=english_title]... [--series 시리즈=english_title]...` | `taxonomy_ensure` | 없는 태그/시리즈 페이지 생성, `tag_slugs.yml` 갱신 (멱등) | 파일 생성 |
+| `post-validate <file>` | `post_validate` | 프론트매터/본문 규칙 검증 | 읽기 전용 |
+| `find-files-to-delete <title>` | `find_files_to_delete` | 제목으로 포스트와 이미지 탐색 | 읽기 전용 |
+| `delete-files <path>... [--yes]` | `delete_files(confirm)` | 파일 삭제 (`--yes` 없으면 dry-run) | 삭제 |
+| `find-unused-assets` | `find_unused_assets` | 미사용 tags/series/projects/이미지 탐색 | 읽기 전용 |
+| `execute-cleanup <path>... [--yes]` | `execute_cleanup(confirm)` | 미사용 에셋 삭제 + `tag_slugs.yml` 동기화 (`--yes` 없으면 dry-run) | 삭제 |
+
+<br>
+
+## 🛡 안전 모델
+
+- **dry-run 기본**: `delete-files`, `execute-cleanup`은 `--yes`(MCP에서는 `confirm=true`) 없이는 아무것도 지우지 않고 지워질 항목만 보여줍니다.
+- **경로 allowlist**: 삭제 대상은 `blog_root` 하위의 허용 디렉토리(`_posts`, `_pages`, `assets/images`, `_site/assets/images`)로 제한됩니다. `..`나 심볼릭 링크는 resolve 후 검사하며, 벗어나면 거부(`skipped`)됩니다.
+- **사용자 확인 필수**: 스킬(`delete-post`, `cleanup-blog`)은 목록을 보여주고 명시적 확인/번호 선택을 받은 항목에만 `--yes`를 사용하도록 규정합니다.
+- **카테고리/프로젝트는 사용자만 추가**: `post-validate`가 navigation.yml에 없는 카테고리와 페이지 없는 프로젝트를 오류로 보고하며, 도구는 이를 생성하지 않습니다.
+- **쓰기 안전**: `post-write`는 기존 파일을 `--overwrite` 없이 덮어쓰지 않습니다.
+
+<br>
+
+## 🧪 테스트
 
 ```bash
-python -m blog_manager.mcp_server
-```
-정상적으로 실행되면 터미널이 멈춘 채로 대기합니다(stdio로 MCP 클라이언트의
-연결을 기다리는 정상 상태입니다). `Ctrl+C`로 종료하세요.
-
-### 3. Claude Desktop에 연결하기
-
-Claude Desktop 설정(Settings → Developer → Edit Config)에서 여는 설정 파일에
-`mcp-configs/claude_desktop_config.example.json`의 `blog-agent` 항목을
-합쳐 넣고, 경로를 실제 절대 경로로 바꾼 뒤 Claude Desktop을 재시작하세요.
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "blog-agent": {
-      "command": "/ABSOLUTE/PATH/TO/blog-agent/venv/bin/python3",
-      "args": ["-m", "blog_manager.mcp_server"],
-      "cwd": "/ABSOLUTE/PATH/TO/blog-agent"
-    }
-  }
-}
+venv/bin/python -m pytest
 ```
 
-### 4. Google Antigravity에 연결하기
-
-`mcp-configs/antigravity_mcp_config.example.json`의 내용을 경로만 바꿔서
-아래 위치 중 하나에 저장한 뒤, Antigravity에서 MCP 서버 목록을 새로고침하세요.
-
-- 전역: `~/.gemini/config/mcp_config.json`
-- 이 프로젝트에만 적용: `.agents/mcp_config.json`
-
-### 5. 참고 사항
-
-- 두 클라이언트 모두 도구를 실제로 실행하기 전에 사용자 확인을 요청하는
-  UI를 갖고 있어서, `delete_files` / `execute_cleanup`처럼 파일을 지우는
-  도구도 기존 ADK 버전과 동일하게 "먼저 찾고 확인받은 뒤 삭제" 흐름을
-  유지할 수 있습니다. MCP 서버의 `instructions`에도 이 흐름을 명시해
-  두었습니다.
-- Notion/Gemini API 키는 `.env`에서 읽어오므로, Claude Desktop이나
-  Antigravity의 설정 파일에 별도로 `env` 값을 넣지 않아도 됩니다. 원한다면
-  `env` 필드로 덮어쓸 수도 있습니다.
+임시 디렉토리에 가짜 블로그 트리를 만들어 경로 검증, 검증기, taxonomy, dry-run 동작을 테스트합니다.
